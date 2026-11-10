@@ -1,0 +1,65 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: perpus-db
+    environment:
+      POSTGRES_DB: perpustakaan
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d perpustakaan"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  book-service:
+    build: ./book-service
+    container_name: perpus-book
+    environment: &dbenv
+      DB_HOST: db
+      DB_NAME: perpustakaan
+      DB_USER: admin
+      DB_PASSWORD: admin123
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [backend]
+
+  member-service:
+    build: ./member-service
+    container_name: perpus-member
+    environment: *dbenv
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [backend]
+
+  loan-service:
+    build: ./loan-service
+    container_name: perpus-loan
+    environment:
+      <<: *dbenv
+      BOOK_SERVICE_URL: http://book-service:5001
+      MEMBER_SERVICE_URL: http://member-service:5002
+    depends_on:
+      db: { condition: service_healthy }
+      book-service: { condition: service_started }
+      member-service: { condition: service_started }
+    networks: [backend]
+
+  gateway:
+    build: ./gateway
+    container_name: perpus-gateway
+    ports:
+      - "8080:80"
+    depends_on: [book-service, member-service, loan-service]
+    networks: [frontend, backend]
+
+volumes:
+  db_data:
+
+networks:
+  frontend:
+  backend:
