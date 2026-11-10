@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perpustakaan - CRUD</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:960px;margin:24px auto;padding:0 12px;color:#222}
+  h1{font-size:1.4rem} h2{font-size:1.1rem;margin-top:28px}
+  form{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  input{padding:6px;border:1px solid #bbb;border-radius:4px}
+  button{padding:6px 10px;border:0;border-radius:4px;background:#2563eb;color:#fff;cursor:pointer}
+  button.del{background:#dc2626} button.alt{background:#059669}
+  table{border-collapse:collapse;width:100%;font-size:.9rem}
+  th,td{border:1px solid #ddd;padding:6px;text-align:left} th{background:#f3f4f6}
+</style>
+</head>
+<body>
+<h1>Sistem Perpustakaan (Microservices)</h1>
+<div id="app"></div>
+<script>
+const cfg = {
+  books:   {title:"Buku",       fields:["title","author","isbn","stock"]},
+  members: {title:"Anggota",    fields:["name","email","phone"]},
+  loans:   {title:"Peminjaman", fields:["member_id","book_id"], noEdit:true}
+};
+const app = document.getElementById("app");
+
+async function api(path, method="GET", body){
+  const r = await fetch("/api/"+path, {method, headers:{"Content-Type":"application/json"},
+    body: body ? JSON.stringify(body) : undefined});
+  const j = await r.json();
+  if(!r.ok) alert(j.error || "Terjadi kesalahan");
+  return j;
+}
+
+async function render(){
+  app.innerHTML = "";
+  for(const [res,c] of Object.entries(cfg)){
+    const rows = await api(res);
+    const sec = document.createElement("section");
+    sec.innerHTML = `<h2>${c.title}</h2>
+      <form data-res="${res}">${c.fields.map(f=>`<input name="${f}" placeholder="${f}" required>`).join("")}
+      <button>Tambah</button></form>`;
+    const cols = rows.length ? Object.keys(rows[0]) : [];
+    let t = "<table><tr>"+cols.map(k=>`<th>${k}</th>`).join("")+"<th>Aksi</th></tr>";
+    for(const r of rows){
+      t += "<tr>"+cols.map(k=>`<td>${r[k] ?? ""}</td>`).join("")+"<td>";
+      if(res==="loans" && r.status==="borrowed") t += `<button class="alt" onclick="ret(${r.id})">Kembalikan</button> `;
+      if(!c.noEdit) t += `<button onclick="edit('${res}',${r.id})">Edit</button> `;
+      t += `<button class="del" onclick="del('${res}',${r.id})">Hapus</button></td></tr>`;
+    }
+    sec.innerHTML += t+"</table>";
+    app.appendChild(sec);
+  }
+  document.querySelectorAll("form").forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(f));
+    await api(f.dataset.res,"POST",data); render();
+  });
+}
+async function del(res,id){ if(confirm("Hapus data ini?")){ await api(`${res}/${id}`,"DELETE"); render(); } }
+async function ret(id){ await api(`loans/${id}`,"PUT",{status:"returned"}); render(); }
+async function edit(res,id){
+  const cur = await api(`${res}/${id}`), data = {};
+  for(const f of cfg[res].fields){ const v = prompt(f, cur[f] ?? ""); if(v!==null) data[f]=v; }
+  await api(`${res}/${id}`,"PUT",data); render();
+}
+render();
+</script>
+</body>
+</html>
